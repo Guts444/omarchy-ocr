@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.guts444.ocr",
+  "name": "OCR",
+  "version": "0.1.0",
+  "author": "Guts444",
+  "description": "Grab text from the screen, a window, or a clipboard image",
+  "kinds": [
+    "bar-widget",
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "barWidget": "OcrWidget.qml",
+    "overlay": "OcrOverlay.qml"
+  },
+  "barWidget": {
+    "displayName": "OCR",
+    "description": "Text from screen — region, window, clipboard, or full display",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "langs": "eng",
+      "historySize": 20,
+      "upscale": true
+    },
+    "schema": [
+      { "key": "langs", "type": "string", "label": "Tesseract languages (comma-separated)" },
+      { "key": "historySize", "type": "int", "label": "History size" },
+      { "key": "upscale", "type": "boolean", "label": "Upscale small regions 2x before OCR" }
+    ]
+  }
+}
