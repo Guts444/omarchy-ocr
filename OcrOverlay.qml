@@ -322,6 +322,7 @@ Item {
         spacing: Style.spacing.md
 
         Row {
+          id: titleRow
           width: parent.width
           spacing: Style.spacing.md
 
@@ -344,6 +345,7 @@ Item {
         }
 
         Row {
+          id: modeRow
           width: parent.width
           spacing: Style.space(8)
 
@@ -385,6 +387,7 @@ Item {
         }
 
         Rectangle {
+          id: resultBox
           width: parent.width
           height: Math.max(Style.space(120), parent.height * 0.28)
           radius: root.cornerRadius
@@ -435,6 +438,7 @@ Item {
         }
 
         Rectangle {
+          id: filterBox
           width: parent.width
           height: Math.max(Style.space(32), Style.font.body + Style.spacing.controlPaddingY * 2)
           radius: root.cornerRadius
@@ -473,7 +477,7 @@ Item {
         ListView {
           id: historyList
           width: parent.width
-          height: parent.height - Style.space(220)
+          height: Math.max(0, parent.height - titleRow.height - modeRow.height - resultBox.height - filterBox.height - Style.spacing.md * 4)
           clip: true
           spacing: Style.space(4)
           boundsBehavior: Flickable.StopAtBounds
