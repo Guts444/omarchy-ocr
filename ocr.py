@@ -255,15 +255,79 @@ def pick_best(image: bytes, langs: str) -> tuple[str, float, int, str]:
     return best_text, best_conf, best_count, ""
 
 
+def start_freeze():
+    """Freeze the screen with hyprpicker (the system capture pattern) so slurp
+    selects over a static frame — instant visual feedback and a capture that
+    matches what the user picked. Returns the process or None."""
+    picker = which("hyprpicker")
+    if not picker:
+        return None
+    try:
+        proc = subprocess.Popen(
+            [picker, "-r", "-z"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        time.sleep(0.1)
+        return proc
+    except OSError:
+        return None
+
+
+def stop_freeze(proc) -> None:
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+    except OSError:
+        pass
+
+
+def dump_region_diagnostics(phase: str, detail: str) -> None:
+    """Write a diagnostic dump when slurp misbehaves — the widget can't show
+    slurp's stderr on a timeout, so we capture it here for the next round."""
+    try:
+        lines = [f"phase={phase} detail={detail}"]
+        for var in ("WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "HYPRLAND_INSTANCE_SIGNATURE", "DISPLAY", "XDG_SESSION_TYPE"):
+            lines.append(f"{var}={os.environ.get(var, '<unset>')}")
+        layers = subprocess.run(
+            ["hyprctl", "layers"], capture_output=True, text=True, timeout=5, check=False
+        )
+        lines.append("layers:\n" + (layers.stdout or "")[:1500])
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (CACHE_DIR / "debug-region.log").write_text("\n".join(lines), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def capture_region(geom: str | None) -> tuple[bytes | None, str]:
     if not geom:
         slurp = which("slurp")
         if not slurp:
             return None, "slurp not found"
-        proc = run([slurp], text=True)
-        geom = (proc.stdout or "").strip()
-        if proc.returncode != 0 or not geom:
-            return None, "cancelled"
+        freeze = start_freeze()
+        try:
+            try:
+                proc = subprocess.run(
+                    [slurp],
+                    capture_output=True,
+                    text=True,
+                    stdin=subprocess.DEVNULL,  # slurp blocks reading candidate rects from stdin; never inherit a pipe
+                    timeout=25,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                detail = ""
+                if exc.stderr:
+                    detail = exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else str(exc.stderr)
+                dump_region_diagnostics("timeout", detail)
+                return None, f"slurp timed out ({detail or 'no output'})"
+            geom = (proc.stdout or "").strip()
+            if proc.returncode != 0 or not geom:
+                return None, "cancelled"
+        finally:
+            stop_freeze(freeze)
     return grim_geom(geom)
 
 
@@ -421,15 +485,15 @@ def save_history(items: list[dict], limit: int) -> None:
 
 
 def write_status(result: dict) -> None:
-    atomic_write(
-        STATUS_PATH,
-        {
-            "ok": bool(result.get("ok")),
-            "chars": int(result.get("chars") or 0),
-            "error": result.get("error") or "",
-            "ts": int(time.time() * 1000),
-        },
-    )
+    payload = {
+        "ok": bool(result.get("ok")),
+        "chars": int(result.get("chars") or 0),
+        "error": result.get("error") or "",
+        "ts": int(time.time() * 1000),
+    }
+    if result.get("state"):
+        payload["state"] = result["state"]
+    atomic_write(STATUS_PATH, payload)
 
 
 def append_history(text: str, langs: str, mode: str, ms: int, limit: int) -> dict:
@@ -494,6 +558,8 @@ def ocr_main(argv: list[str]) -> int:
     if mode not in {"region", "clip", "screen", "window"}:
         return fail(f"unknown mode: {mode}", langs)
 
+    # Immediate bar feedback: glyph flips to "working" the moment we start.
+    write_status({"ok": False, "chars": 0, "error": "", "state": "working"})
     started = time.monotonic()
 
     if mode == "region":

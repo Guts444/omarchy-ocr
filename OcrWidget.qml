@@ -13,16 +13,19 @@ BarWidget {
   property int lastChars: 0
   property bool lastOk: false
   property bool hasStatus: false
+  property bool working: false
   property string lastError: ""
 
   readonly property string glyph: "A▤"
   readonly property string statusText: {
+    if (working) return glyph + "…"
     if (!hasStatus) return glyph
     if (!lastOk) return glyph + " · !"
     if (lastChars > 0) return glyph + " · " + lastChars
     return glyph
   }
   readonly property string tooltipText: {
+    if (working) return "OCR — working…"
     if (!hasStatus) return "OCR — click to grab text"
     if (!lastOk) return "OCR failed" + (lastError ? ": " + lastError : "")
     return "OCR · " + lastChars + " chars — click to open"
@@ -35,6 +38,11 @@ BarWidget {
       return
     }
     if (!data || typeof data !== "object") return
+    if (data.state === "working") {
+      root.working = true
+      return
+    }
+    root.working = false
     hasStatus = true
     lastOk = data.ok === true
     lastChars = Number(data.chars) || 0
@@ -66,7 +74,7 @@ BarWidget {
     watchChanges: true
     printErrors: false
     onLoaded: root.applyStatus(text())
-    onLoadFailed: { root.hasStatus = false; root.lastChars = 0; root.lastError = "" }
+    onLoadFailed: { root.hasStatus = false; root.lastChars = 0; root.lastError = ""; root.working = false }
     onFileChanged: reload()
   }
 
